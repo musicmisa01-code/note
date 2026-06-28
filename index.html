@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2026音楽発表会 presents!</title>
+
+<!-- 🎵 音楽記号対応フォント -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Music&display=swap" rel="stylesheet">
+
+<style>
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #fdf6e3;
+    font-family: sans-serif;
+    text-align: center;
+    color: #5d4037;
+    touch-action: none;
+}
+
+#canvas {
+    display: block;
+    background: #fff;
+}
+
+#game-ui {
+    position: absolute;
+    top: 15px;
+    width: 100%;
+    pointer-events: none;
+    display: flex;
+    justify-content: space-around;
+    font-size: 18px;
+    font-weight: bold;
+    z-index: 10;
+}
+
+#score, #timer {
+    background: rgba(255,255,255,0.8);
+    padding: 5px 15px;
+    border-radius: 20px;
+}
+
+#menu {
+    position: absolute;
+    inset: 0;
+    background: rgba(253,246,227,0.95);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+}
+
+#menu-title {
+    font-size: 28px;
+    font-weight: bold;
+    color: #d84315;
+    margin-bottom: 30px;
+}
+
+button {
+    padding: 15px 25px;
+    font-size: 18px;
+    margin: 8px;
+    border-radius: 20px;
+    border: none;
+    background: #d84315;
+    color: white;
+    cursor: pointer;
+}
+
+button.start {
+    padding: 22px 60px;
+    font-size: 24px;
+    font-weight: bold;
+    background: #6d4c41;
+}
+</style>
+</head>
+
+<body>
+
+<div id="game-ui">
+    <div id="score">スコア: 0</div>
+    <div id="timer">残り: 30秒</div>
+</div>
+
+<div id="menu">
+    <h1 id="menu-title">2026音楽発表会<br>presents!</h1>
+
+    <button onclick="setLevel(2000)">初級</button>
+    <button onclick="setLevel(1200)">中級</button>
+    <button onclick="setLevel(600)">上級</button>
+
+    <button class="start" onclick="startGame()">スタート</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const startSound = new Audio("start.mp3");
+const selectSound = new Audio("select.mp3");
+const correctSound = new Audio("correct.mp3");
+const wrongSound = new Audio("wrong.mp3");
+const finishSound = new Audio("finish.mp3");
+
+function playSound(sound){
+    sound.currentTime = 0;
+    sound.play().catch(()=>{});
+}
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let score = 0;
+let timeLeft = 30;
+let gameActive = false;
+let items = [];
+let spawnTimer;
+let timerId;
+let spawnSpeed = 1200;
+
+// 🎼 音符・休符（完全版）
+const itemsData = [
+    { char: '♪',  val: 0.5,  color: '#3e2723' },
+    { char: '♩',  val: 1,    color: '#3e2723' },
+    { char: '♫',  val: 1,    color: '#3e2723' },
+    { char: '𝅗𝅥', val: 2,    color: '#3e2723' },
+    { char: '𝅝', val: 4,    color: '#3e2723' },
+
+    { char: '𝄾', val: -0.5, color: '#3e2723' },
+    { char: '𝄽', val: -1,   color: '#3e2723' },
+    { char: '𝄼', val: -2,   color: '#3e2723' },
+    { char: '𝄻', val: -4,   color: '#3e2723' }
+];
+
+function setLevel(v) {
+    spawnSpeed = v;
+    playSound(selectSound);
+}
+
+function startGame() {
+    score = 0;
+    timeLeft = 30;
+    gameActive = true;
+    items = [];
+
+    document.getElementById("score").innerText = "スコア: 0";
+    document.getElementById("timer").innerText = "残り: 30秒";
+
+    document.getElementById("menu").style.display = "none";
+
+    playSound(startSound);
+    spawnItem();
+    gameLoop();
+    timerInterval();
+}
+
+function spawnItem() {
+    if (!gameActive) return;
+
+    const item = itemsData[Math.floor(Math.random() * itemsData.length)];
+
+    items.push({
+        x: Math.random() * (canvas.width - 60) + 30,
+        y: -50,
+        speed: 2 + (2000 - spawnSpeed) / 500,
+        ...item
+    });
+
+    spawnTimer = setTimeout(spawnItem, spawnSpeed / 2);
+}
+
+function gameLoop() {
+    if (!gameActive) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 🎵 重要：ここで音楽フォント指定
+    ctx.font = "48px 'Noto Music', serif";
+
+    for (let i = items.length - 1; i >= 0; i--) {
+        let it = items[i];
+        it.y += it.speed;
+
+        ctx.fillStyle = it.color;
+        ctx.fillText(it.char, it.x, it.y);
+
+        if (it.y > canvas.height + 50) items.splice(i, 1);
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+function handleHit(x, y) {
+    if (!gameActive) return;
+
+    for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+
+        if (Math.hypot(x - it.x, y - (it.y - 20)) < 55) {
+            score += it.val;
+
+            if (it.val > 0) {
+                playSound(correctSound);
+            } else {
+                playSound(wrongSound);
+            }
+
+            document.getElementById("score").innerText = "スコア: " + score.toFixed(1);
+            items.splice(i, 1);
+            break;
+        }
+    }
+}
+
+canvas.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    handleHit(t.clientX, t.clientY);
+}, { passive: true });
+
+canvas.addEventListener('mousedown', (e) => {
+    handleHit(e.clientX, e.clientY);
+});
+
+function timerInterval() {
+    clearInterval(timerId);
+    timerId = setInterval(() => {
+        timeLeft--;
+        document.getElementById("timer").innerText = "残り: " + timeLeft + "秒";
+
+        if (timeLeft <= 0) {
+            gameActive = false;
+            clearInterval(timerId);
+            clearTimeout(spawnTimer);
+
+            playSound(finishSound);
+
+            setTimeout(() => {
+                alert("終了！スコア: " + score.toFixed(1));
+                document.getElementById("menu").style.display = "flex";
+            }, 300);
+        }
+    }, 1000);
+}
+</script>
+
+</body>
+</html>
